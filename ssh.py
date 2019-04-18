@@ -1,78 +1,121 @@
 import asyncio
 
 import sys
+import socket
 from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.signaling import CopyAndPasteSignaling
 
 
-async def consume_signaling(pc, signaling):
+async def consume_signaling(connection, signal_server):
     while True:
-        obj = await signaling.receive()
+        obj = await signal_server.receive()
 
         if isinstance(obj, RTCSessionDescription):
-            await pc.setRemoteDescription(obj)
+            await connection.setRemoteDescription(obj)
 
             if obj.type == 'offer':
-                # send answer
-                await pc.setLocalDescription(await pc.createAnswer())
-                await signaling.send(pc.localDescription)
+                await connection.setLocalDescription(await connection.createAnswer())
+                await signal_server.send(connection.localDescription)
         else:
             print('Exiting')
             break
 
 
-async def run_answer(pc, signaling):
-    await signaling.connect()
+def start_proxy(channel):
+    print('creating socket to port ', 22)
+    sock = socket.socket()
+    sock.connect(('127.0.0.1', 22))
+    print('created!')
 
-    @pc.on('datachannel')
-    def on_datachannel(channel):
-        print('created by remote party')
+    # relay channel -> socket
+    @channel.on('message')
+    def on_message(message):
+        print('sending to socket')
+        sock.send(message)
+        print('sent to socket')
 
-        @channel.on('message')
-        def on_message(message):
-            print(message)
-
-            if isinstance(message, str) and message.startswith('ping'):
-                channel.send('pong')
-
-    await consume_signaling(pc, signaling)
-
-
-async def run_offer(pc, signaling):
-    await signaling.connect()
-
-    channel = pc.createDataChannel('chat')
-    print('created by local party')
-
-    async def send_pings():
+    # relay socket -> channel
+    async def socket_reader():
         while True:
-            channel.send('ping')
-            await asyncio.sleep(1)
+            data = sock.recv(1024)
+            if not data:
+                print('breaking connection')
+                break
+            print('sending to channel')
+            channel.send(data)
+            print('sent to channel')
+        sock.close()
+
+    asyncio.ensure_future(socket_reader())
+
+
+def start_listening(channel):
+    print('listening on port ', 2222)
+    sock = socket.socket()
+    sock.bind(('127.0.0.1', 2222))
+    sock.listen(1)
+    conn, addr = sock.accept()
+    print('started!')
+
+    # relay channel -> socket
+    @channel.on('message')
+    def on_message(message):
+        print('sending to socket')
+        conn.send(message)
+        print('sent to socket')
+
+    # relay socket -> channel
+    async def socket_reader():
+        while True:
+            data = conn.recv(1024)
+            if not data:
+                print('breaking connection')
+                break
+            print('sending to channel')
+            channel.send(data)
+            print('sent to channel')
+        conn.close()
+
+    asyncio.ensure_future(socket_reader())
+
+
+async def run_answer(connection, signal_server):
+    await signal_server.connect()
+
+    @connection.on('datachannel')
+    def on_datachannel(channel):
+        if channel.label == 'ssh-proxy':
+            start_proxy(channel)
+
+    await consume_signaling(connection, signal_server)
+
+
+async def run_offer(connection, signal_server):
+    await signal_server.connect()
+
+    channel = connection.createDataChannel('ssh-proxy')
+    print('created by local party')
 
     @channel.on('open')
     def on_open():
-        asyncio.ensure_future(send_pings())
-
-    @channel.on('message')
-    def on_message(message):
-        print(message)
+        start_listening(channel)
 
     # send offer
-    await pc.setLocalDescription(await pc.createOffer())
-    await signaling.send(pc.localDescription)
+    await connection.setLocalDescription(await connection.createOffer())
+    await signal_server.send(connection.localDescription)
 
-    await consume_signaling(pc, signaling)
+    await consume_signaling(connection, signal_server)
 
 
 if __name__ == '__main__':
-    signaling = CopyAndPasteSignaling()
-    pc = RTCPeerConnection()
+    signal_server = CopyAndPasteSignaling()
+    connection = RTCPeerConnection()
 
     role = sys.argv[1]
     if role == 'offer':
-        coro = run_offer(pc, signaling)
+        coro = run_offer(connection, signal_server)
     else:
-        coro = run_answer(pc, signaling)
+        coro = run_answer(connection, signal_server)
 
     # run event loop
     loop = asyncio.get_event_loop()
@@ -81,5 +124,5 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         pass
     finally:
-        loop.run_until_complete(pc.close())
-        loop.run_until_complete(signaling.close())
+        loop.run_until_complete(connection.close())
+        loop.run_until_complete(signal_server.close())

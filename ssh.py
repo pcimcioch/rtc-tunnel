@@ -113,13 +113,12 @@ def start_providing(channel, tcp):
     def on_message(message):
         tcp.send(bytes(message, "utf8"))
 
-    async def send_pings():
+    async def receive_data():
         while True:
-            channel.send('from proxy')
-            print('> from proxy')
-            await asyncio.sleep(3)
+            data = await tcp.receive()
+            channel.send(data.decode("utf8"))
 
-    asyncio.ensure_future(send_pings())
+    asyncio.ensure_future(receive_data())
 
 
 def start_consuming(channel, tcp):

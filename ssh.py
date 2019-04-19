@@ -21,7 +21,6 @@ class TcpConsumer:
 
     async def close(self):
         if self._writer is not None:
-            await self.send(None)
             self._writer.close()
             self._reader = None
             self._writer = None
@@ -34,8 +33,20 @@ class TcpConsumer:
             return
 
     def send(self, data):
+        if not isinstance(data, (str, bytes)):
+            raise ValueError('Cannot send unsupported data type: %s' % type(data))
+
+        if data == '':
+            user_data = b'\x00'
+        elif isinstance(data, str):
+            user_data = data.encode('utf8')
+        elif data == b'':
+            user_data = b'\x00'
+        else:
+            user_data = data
+
         try:
-            self._writer.write(data)
+            self._writer.write(user_data)
         except Exception:
             traceback.print_exc()
             return
@@ -86,8 +97,20 @@ class TcpProvider:
             print('Provider not sending - client not connected')
             return
 
+        if not isinstance(data, (str, bytes)):
+            raise ValueError('Cannot send unsupported data type: %s' % type(data))
+
+        if data == '':
+            user_data = b'\x00'
+        elif isinstance(data, str):
+            user_data = data.encode('utf8')
+        elif data == b'':
+            user_data = b'\x00'
+        else:
+            user_data = data
+
         try:
-            self._writer.write(data)
+            self._writer.write(user_data)
         except Exception:
             traceback.print_exc()
             return
@@ -111,12 +134,12 @@ async def consume_signaling(connection, signal_server):
 def start_providing(channel, tcp):
     @channel.on('message')
     def on_message(message):
-        tcp.send(bytes(message, "utf8"))
+        tcp.send(message)
 
     async def receive_data():
         while True:
             data = await tcp.receive()
-            channel.send(data.decode("utf8"))
+            channel.send(data)
 
     asyncio.ensure_future(receive_data())
 
@@ -124,12 +147,12 @@ def start_providing(channel, tcp):
 def start_consuming(channel, tcp):
     @channel.on('message')
     def on_message(message):
-        tcp.send(bytes(message, "utf8"))
+        tcp.send(message)
 
     async def receive_data():
         while True:
             data = await tcp.receive()
-            channel.send(data.decode("utf8"))
+            channel.send(data)
 
     asyncio.ensure_future(receive_data())
 

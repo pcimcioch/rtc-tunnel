@@ -18,6 +18,7 @@ class TcpConsumer:
         self._reader, self._writer = await asyncio.open_connection(
             host=self._host,
             port=self._port)
+        print('Connected to port %s' % self._port)
 
     async def close(self):
         if self._writer is not None:
@@ -65,6 +66,7 @@ class TcpProvider:
         self._connected = asyncio.Event()
 
         def client_connected(reader, writer):
+            print('New client connected to port %s' % self._port)
             self._reader = reader
             self._writer = writer
             self._connected.set()
@@ -73,6 +75,7 @@ class TcpProvider:
             client_connected,
             host=self._host,
             port=self._port)
+        print('Listening for connections on port %s' % self._port)
 
     async def close(self):
         if self._writer is not None:
@@ -161,7 +164,6 @@ async def run_answer(connection, signal_server):
     await signal_server.connect()
     tcp = TcpProvider('', 3334)
     await tcp.connect()
-    print('Listening on 3334')
 
     @connection.on('datachannel')
     def on_datachannel(channel):
@@ -173,9 +175,8 @@ async def run_answer(connection, signal_server):
 
 async def run_offer(connection, signal_server):
     await signal_server.connect()
-    tcp = TcpConsumer('127.0.0.1', 3333)
+    tcp = TcpConsumer('127.0.0.1', 22)
     await tcp.connect()
-    print('Connected to 3333')
 
     channel = connection.createDataChannel('ssh-proxy')
     print('Channel created')

@@ -2,6 +2,8 @@ import asyncio
 
 import sys
 import socket
+import time
+
 from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.signaling import CopyAndPasteSignaling
 
@@ -22,61 +24,31 @@ async def consume_signaling(connection, signal_server):
 
 
 def start_proxy(channel):
-    print('creating socket to port ', 22)
-    sock = socket.socket()
-    sock.connect(('127.0.0.1', 22))
-    print('created!')
-
-    # relay channel -> socket
     @channel.on('message')
     def on_message(message):
-        print('sending to socket')
-        sock.send(message)
-        print('sent to socket')
+        print('< ' + message)
 
-    # relay socket -> channel
-    async def socket_reader():
+    async def send_pings():
         while True:
-            data = sock.recv(1024)
-            if not data:
-                print('breaking connection')
-                break
-            print('sending to channel')
-            channel.send(data)
-            print('sent to channel')
-        sock.close()
+            channel.send('from proxy')
+            print('> from proxy')
+            await asyncio.sleep(3)
 
-    asyncio.ensure_future(socket_reader())
+    asyncio.ensure_future(send_pings())
 
 
 def start_listening(channel):
-    print('listening on port ', 2222)
-    sock = socket.socket()
-    sock.bind(('127.0.0.1', 2222))
-    sock.listen(1)
-    conn, addr = sock.accept()
-    print('started!')
-
-    # relay channel -> socket
     @channel.on('message')
     def on_message(message):
-        print('sending to socket')
-        conn.send(message)
-        print('sent to socket')
+        print('< ' + message)
 
-    # relay socket -> channel
-    async def socket_reader():
+    async def send_pings():
         while True:
-            data = conn.recv(1024)
-            if not data:
-                print('breaking connection')
-                break
-            print('sending to channel')
-            channel.send(data)
-            print('sent to channel')
-        conn.close()
+            channel.send('from listen')
+            print('> from listen')
+            await asyncio.sleep(5)
 
-    asyncio.ensure_future(socket_reader())
+    asyncio.ensure_future(send_pings())
 
 
 async def run_answer(connection, signal_server):

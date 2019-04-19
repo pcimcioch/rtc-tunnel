@@ -1,11 +1,67 @@
 import asyncio
 
 import sys
-import socket
-import time
+import traceback
 
+from socket import SOCK_STREAM, AF_INET, socket
 from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.signaling import CopyAndPasteSignaling
+
+
+class TcpConsumer:
+    def __init__(self, host, port):
+        self._host = host
+        self._port = port
+        self._reader = None
+        self._writer = None
+
+    async def connect(self):
+        self._reader, self._writer = await asyncio.open_connection(
+            host=self._host,
+            port=self._port)
+
+    async def close(self):
+        if self._writer is not None:
+            await self.send(None)
+            self._writer.close()
+            self._reader = None
+            self._writer = None
+
+    async def receive(self):
+        try:
+            return await self._reader.readuntil()
+        except asyncio.IncompleteReadError:
+            return
+
+    def send(self, data):
+        try:
+            self._writer.write(bytes(data, "utf8"))
+        except Exception:
+            traceback.print_exc()
+            return
+
+
+# TODO remove
+class TcpConsumer2:
+    def __init__(self, host, port):
+        self._host = host
+        self._port = port
+        self._socket = None
+
+    def connect(self):
+        self._socket = socket(AF_INET, SOCK_STREAM)
+        self._socket.connect(('127.0.0.1', 3333))
+
+    def close(self):
+        if self._socket is not None:
+            self._socket.close()
+
+    def send(self, data):
+        try:
+            self._socket.send(bytes(data, "utf8"))
+        except Exception:
+            traceback.print_exc()
+            return
 
 
 async def consume_signaling(connection, signal_server):
@@ -37,10 +93,10 @@ def start_proxy(channel):
     asyncio.ensure_future(send_pings())
 
 
-def start_listening(channel):
+def start_listening(channel, tcp):
     @channel.on('message')
     def on_message(message):
-        print('< ' + message)
+        tcp.send(message)
 
     async def send_pings():
         while True:
@@ -64,13 +120,16 @@ async def run_answer(connection, signal_server):
 
 async def run_offer(connection, signal_server):
     await signal_server.connect()
+    tcp = TcpConsumer('127.0.0.1', 3333)
+    await tcp.connect()
+    print('Connected to 3333')
 
     channel = connection.createDataChannel('ssh-proxy')
-    print('created by local party')
+    print('Channel created')
 
     @channel.on('open')
     def on_open():
-        start_listening(channel)
+        start_listening(channel, tcp)
 
     # send offer
     await connection.setLocalDescription(await connection.createOffer())

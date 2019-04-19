@@ -29,13 +29,14 @@ class TcpConsumer:
 
     async def receive(self):
         try:
-            return await self._reader.readuntil()
-        except asyncio.IncompleteReadError:
+            return await self._reader.read(1024)
+        except Exception:
+            traceback.print_exc()
             return
 
     def send(self, data):
         try:
-            self._writer.write(bytes(data, "utf8"))
+            self._writer.write(data)
         except Exception:
             traceback.print_exc()
             return
@@ -96,13 +97,12 @@ def start_proxy(channel):
 def start_listening(channel, tcp):
     @channel.on('message')
     def on_message(message):
-        tcp.send(message)
+        tcp.send(bytes(message, "utf8"))
 
     async def send_pings():
         while True:
-            channel.send('from listen')
-            print('> from listen')
-            await asyncio.sleep(5)
+            data = await tcp.receive()
+            channel.send(data.decode("utf8"))
 
     asyncio.ensure_future(send_pings())
 

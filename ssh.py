@@ -5,7 +5,6 @@ import traceback
 
 from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.signaling import CopyAndPasteSignaling
-from socket import AF_INET, socket, SOCK_STREAM
 
 
 class TcpConsumer:
@@ -60,49 +59,6 @@ class TcpConsumer:
             return
 
 
-class TcpConsumer2:
-    def __init__(self, host, port):
-        self._host = host
-        self._port = port
-        self._socket = None
-
-    def connect(self):
-        self._socket = socket(AF_INET, SOCK_STREAM)
-        self._socket.connect((self._host, self._port))
-        print('Connected to port %s' % self._port)
-
-    def close(self):
-        if self._socket is not None:
-            self._socket.close()
-            self._socket = None
-
-    def receive(self):
-        try:
-            return self._socket.recv(1024)
-        except Exception:
-            traceback.print_exc()
-            return
-
-    def send(self, data):
-        if not isinstance(data, (str, bytes)):
-            raise ValueError('Cannot send unsupported data type: %s' % type(data))
-
-        if data == '':
-            user_data = b'\x00'
-        elif isinstance(data, str):
-            user_data = data.encode('utf8')
-        elif data == b'':
-            user_data = b'\x00'
-        else:
-            user_data = data
-
-        try:
-            self._socket.send(user_data)
-        except Exception:
-            traceback.print_exc()
-            return
-
-
 class TcpProvider:
     def __init__(self, host, port):
         self._host = host
@@ -110,23 +66,22 @@ class TcpProvider:
         self._reader = None
         self._writer = None
         self._server = None
-        self._connected = None
 
     async def connect(self):
-        self._connected = asyncio.Event()
+        connected = asyncio.Event()
 
         def client_connected(reader, writer):
             print('New client connected to port %s' % self._port)
             self._reader = reader
             self._writer = writer
-            self._connected.set()
+            connected.set()
 
         self._server = await asyncio.start_server(
             client_connected,
             host=self._host,
             port=self._port)
         print('Listening for connections on port %s' % self._port)
-        await self._connected.wait()
+        await connected.wait()
 
     async def close(self):
         if self._writer is not None:
@@ -136,7 +91,6 @@ class TcpProvider:
         if self._server is not None:
             self._server.close()
             self._server = None
-        self._connected = None
 
     async def receive(self):
         try:

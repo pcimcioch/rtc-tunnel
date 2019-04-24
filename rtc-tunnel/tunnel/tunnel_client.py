@@ -1,4 +1,6 @@
 import asyncio
+import random
+import string
 import traceback
 
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCDataChannel
@@ -8,9 +10,10 @@ from .socket_connection import SocketConnection
 
 
 class TunnelClient:
-    def __init__(self, host: str, port: int):
+    def __init__(self, host: str, port: int, destination_port: int):
         self._host = host
         self._port = port
+        self._destination_port = destination_port
         self._signal_server = None
         self._server = None
         self._peer_connection = None
@@ -38,10 +41,7 @@ class TunnelClient:
         print('[INIT] Established RTC connection')
 
         print('[INIT] Starting socket server on [%s:%s]' % (self._host, self._port))
-        self._server = await asyncio.start_server(
-            self._handle_new_client,
-            host=self._host,
-            port=self._port)
+        self._server = await asyncio.start_server(self._handle_new_client,host=self._host,port=self._port)
         print('[INIT] Socket server started')
         print('[STARTED] Tunneling client started')
         print()
@@ -50,24 +50,25 @@ class TunnelClient:
         print('[EXIT] Signalling server closed connection')
 
     def _handle_new_client(self, reader: StreamReader, writer: StreamWriter):
-        print('[CLIENT] New client connected')
+        client_id = ''.join(random.choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(8))
+        print('[CLIENT %s] New client connected' % client_id)
         connection = SocketConnection(reader, writer)
 
-        channel = self._peer_connection.createDataChannel('ssh-proxy')
-        print('[CLIENT] Datachannel ssh-proxy created')
+        channel = self._peer_connection.createDataChannel('tunnel-%s-%s' % (client_id, self._destination_port))
+        print('[CLIENT %s] Datachannel %s created' % (client_id, channel.label))
 
         @channel.on('open')
         def on_open():
-            self._configure_channel(channel, connection)
+            self._configure_channel(channel, connection, client_id)
 
-    def _configure_channel(self, channel: RTCDataChannel, connection: SocketConnection):
+    def _configure_channel(self, channel: RTCDataChannel, connection: SocketConnection, client_id: str):
         @channel.on('message')
         def on_message(message):
             connection.send(message)
 
         @channel.on('close')
         def on_close():
-            print('[CLIENT] Channel closed')
+            print('[CLIENT %s] Datachannel %s closed' % (client_id, channel.label))
             connection.close()
 
         async def receive_loop_async():
@@ -80,12 +81,12 @@ class TunnelClient:
                 if not data:
                     break
                 channel.send(data)
-            print('[CLIENT] Socket connection closed')
+            print('[CLIENT %s] Socket connection closed' % client_id)
             connection.close()
             channel.close()
 
         asyncio.ensure_future(receive_loop_async())
-        print('[CLIENT] Datachannel ssh-proxy configured')
+        print('[CLIENT %s] Datachannel %s configured' % (client_id, channel.label))
 
     async def close_async(self):
         if self._signal_server is not None:

@@ -35,23 +35,27 @@ class TunnelServer:
         print('[CLIENT] Established RTC connection')
 
         @peer_connection.on('datachannel')
-        def on_datachannel(channel):
-            if channel.label == 'ssh-proxy':
-                # TODO port taken from channel name
-                print('[CLIENT] Connected to ssh-proxy channel')
-                print('[CLIENT] connecting to localhost:22')
-                client = SocketClient('127.0.0.1', 22)
+        def on_datachannel(channel: RTCDataChannel):
+            name_parts = channel.label.split('-')
+            if len(name_parts) == 3 and name_parts[0] == 'tunnel' and name_parts[2].isdigit():
+                client_id = name_parts[1]
+                port = int(name_parts[2])
+                print('[CLIENT %s] Connected to %s channel' % (client_id, channel.label))
+                print('[CLIENT %s] connecting to 127.0.0.1:%s' % (client_id, port))
+                client = SocketClient('127.0.0.1', port)
                 asyncio.ensure_future(client.connect_async())
-                self._configure_channel(channel, client)
+                self._configure_channel(channel, client, client_id)
+            else:
+                print('[CLIENT] Ignoring unknown datachannel %s' % channel.label)
 
-    def _configure_channel(self, channel: RTCDataChannel, client: SocketClient):
+    def _configure_channel(self, channel: RTCDataChannel, client: SocketClient, client_id: str):
         @channel.on('message')
         def on_message(message):
             asyncio.ensure_future(client.send_async(message))
 
         @channel.on('close')
         def on_close():
-            print('[CLIENT] Channel closed')
+            print('[CLIENT %s] Datachannel %s closed' % (client_id, channel.label))
             client.close()
 
         async def receive_loop_async():
@@ -64,12 +68,12 @@ class TunnelServer:
                 if not data:
                     break
                 channel.send(data)
-            print('[CLIENT] Socket connection closed')
+            print('[CLIENT %s] Socket connection closed' % client_id)
             client.close()
             channel.close()
 
         asyncio.ensure_future(receive_loop_async())
-        print('[CLIENT] Datachannel ssh-proxy configured')
+        print('[CLIENT %s] Datachannel %s configured' % (client_id, channel.label))
 
     async def close_async(self):
         if self._signal_server is not None:

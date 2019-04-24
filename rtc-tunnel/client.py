@@ -1,9 +1,12 @@
 import asyncio
-
+# TODO add readme
+# TODO test with rsync
+# TODO add signalling server
+# TODO test on raspberry startup
 from tunnel import TunnelClient
 
 if __name__ == '__main__':
-    client = TunnelClient('', 3334)
+    client = TunnelClient('', 3334, 22)
 
     loop = asyncio.get_event_loop()
     try:

@@ -13,9 +13,7 @@ class SocketClient:
     async def connect_async(self):
         self._connected.clear()
 
-        reader, writer = await asyncio.open_connection(
-            host=self._host,
-            port=self._port)
+        reader, writer = await asyncio.open_connection(host=self._host,port=self._port)
         print('Connected to %s:%s' % (self._host, self._port))
         self._connection = SocketConnection(reader, writer)
 

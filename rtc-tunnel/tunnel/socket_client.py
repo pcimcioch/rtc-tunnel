@@ -1,6 +1,6 @@
 import asyncio
 
-from socket_connection import SocketConnection
+from .socket_connection import SocketConnection
 
 
 class SocketClient:

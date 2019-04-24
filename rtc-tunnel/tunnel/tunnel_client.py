@@ -4,7 +4,7 @@ import traceback
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCDataChannel
 from aiortc.contrib.signaling import CopyAndPasteSignaling
 from asyncio import StreamWriter, StreamReader
-from socket_connection import SocketConnection
+from .socket_connection import SocketConnection
 
 
 class TunnelClient:
@@ -96,15 +96,3 @@ class TunnelClient:
             self._server = None
         if self._peer_connection is not None:
             await self._peer_connection.close()
-
-if __name__ == '__main__':
-    client = TunnelClient('', 3334)
-
-    loop = asyncio.get_event_loop()
-    try:
-        loop.run_until_complete(client.run_async())
-    except KeyboardInterrupt:  # CTRL+C pressed
-        pass
-    finally:
-        loop.run_until_complete(client.close_async())
-        loop.close()

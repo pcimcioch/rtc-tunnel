@@ -53,6 +53,49 @@ class TcpConsumer:
             return
 
 
+class TcpConsumer2:
+    def __init__(self, host, port):
+        self._host = host
+        self._port = port
+        self._socket = None
+
+    def connect(self):
+        self._socket = socket(AF_INET, SOCK_STREAM)
+        self._socket.connect((self._host, self._port))
+        print('Connected to port %s' % self._port)
+
+    def close(self):
+        if self._socket is not None:
+            self._socket.close()
+            self._socket = None
+
+    def receive(self):
+        try:
+            return self._socket.recv(1024)
+        except Exception:
+            traceback.print_exc()
+            return
+
+    def send(self, data):
+        if not isinstance(data, (str, bytes)):
+            raise ValueError('Cannot send unsupported data type: %s' % type(data))
+
+        if data == '':
+            user_data = b'\x00'
+        elif isinstance(data, str):
+            user_data = data.encode('utf8')
+        elif data == b'':
+            user_data = b'\x00'
+        else:
+            user_data = data
+
+        try:
+            self._socket.send(user_data)
+        except Exception:
+            traceback.print_exc()
+            return
+
+
 class TcpProvider:
     def __init__(self, host, port):
         self._host = host
@@ -76,6 +119,7 @@ class TcpProvider:
             host=self._host,
             port=self._port)
         print('Listening for connections on port %s' % self._port)
+        await self._connected.wait()
 
     async def close(self):
         if self._writer is not None:
@@ -88,7 +132,6 @@ class TcpProvider:
         self._connected = None
 
     async def receive(self):
-        await self._connected.wait()
         try:
             return await self._reader.read(1024)
         except Exception:
@@ -162,7 +205,7 @@ def start_consuming(channel, tcp):
 
 async def run_answer(connection, signal_server):
     await signal_server.connect()
-    tcp = TcpProvider('', 3334)
+    tcp = TcpConsumer('127.0.0.1', 22)
     await tcp.connect()
 
     @connection.on('datachannel')
@@ -175,7 +218,7 @@ async def run_answer(connection, signal_server):
 
 async def run_offer(connection, signal_server):
     await signal_server.connect()
-    tcp = TcpConsumer('127.0.0.1', 22)
+    tcp = TcpProvider('', 3334)
     await tcp.connect()
 
     channel = connection.createDataChannel('ssh-proxy')

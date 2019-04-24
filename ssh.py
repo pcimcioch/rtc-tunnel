@@ -5,6 +5,7 @@ import traceback
 
 from aiortc import RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.signaling import CopyAndPasteSignaling
+from socket import AF_INET, socket, SOCK_STREAM
 
 
 class TcpConsumer:
@@ -13,11 +14,14 @@ class TcpConsumer:
         self._port = port
         self._reader = None
         self._writer = None
+        self._connected = None
 
     async def connect(self):
+        self._connected = asyncio.Event()
         self._reader, self._writer = await asyncio.open_connection(
             host=self._host,
             port=self._port)
+        self._connected.set()
         print('Connected to port %s' % self._port)
 
     async def close(self):
@@ -25,15 +29,17 @@ class TcpConsumer:
             self._writer.close()
             self._reader = None
             self._writer = None
+            self._connected = None
 
     async def receive(self):
+        await self._connected.wait()
         try:
             return await self._reader.read(1024)
         except Exception:
             traceback.print_exc()
             return
 
-    def send(self, data):
+    async def send(self, data):
         if not isinstance(data, (str, bytes)):
             raise ValueError('Cannot send unsupported data type: %s' % type(data))
 
@@ -46,6 +52,7 @@ class TcpConsumer:
         else:
             user_data = data
 
+        await self._connected.wait()
         try:
             self._writer.write(user_data)
         except Exception:
@@ -180,7 +187,7 @@ async def consume_signaling(connection, signal_server):
 def start_providing(channel, tcp):
     @channel.on('message')
     def on_message(message):
-        tcp.send(message)
+        asyncio.ensure_future(tcp.send(message))
 
     async def receive_data():
         while True:
@@ -205,12 +212,12 @@ def start_consuming(channel, tcp):
 
 async def run_answer(connection, signal_server):
     await signal_server.connect()
-    tcp = TcpConsumer('127.0.0.1', 22)
-    await tcp.connect()
 
     @connection.on('datachannel')
     def on_datachannel(channel):
         if channel.label == 'ssh-proxy':
+            tcp = TcpConsumer('127.0.0.1', 22)
+            asyncio.ensure_future(tcp.connect())
             start_providing(channel, tcp)
 
     await consume_signaling(connection, signal_server)

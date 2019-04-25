@@ -1,8 +1,8 @@
 import argparse
 import asyncio
-# TODO test with rsync
-# TODO add signalling server
-# TODO test on raspberry startup
+# TODO 1. Test with rsync
+# TODO 2. Add signalling server
+# TODO 3. Test on raspberry startup
 from tunnel import TunnelClient
 
 if __name__ == '__main__':

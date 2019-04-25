@@ -9,6 +9,7 @@ class SocketClient:
         self._port = port
         self._connection = None
         self._connected = asyncio.Event()
+        self._buffer = []
 
     async def connect_async(self):
         self._connected.clear()
@@ -24,10 +25,21 @@ class SocketClient:
             self._connection.close()
             self._connection = None
 
-    async def receive_async(self):
+    async def wait_until_connected_async(self):
         await self._connected.wait()
+
+    async def receive_async(self):
         return await self._connection.receive_async()
 
-    async def send_async(self, data):
-        await self._connected.wait()
-        self._connection.send(data)
+    def send(self, data):
+        # The problem is that we have to make channel configuration as soon as we get 'datachannel' event
+        # But then we have to either:
+        # 1. Open socket in blocking fashion - in the same coroutine - I'm not sure how to do this using asyncio (We have to remember that receive *MUST* be async!)
+        # 2. Make 'send' async so we could add here 'await self._connected.wait()' - but then, as on_message can't be coroutine, put 'send' in separate asyncio task. We can't do this as we care about 'send' order
+        # 3. Make 'send' blocking, but somehow prevent sending messages if connection is not yet established. That's the solution I've chosen. It's not perfect, but it works
+        if self._connected.is_set():
+            while len(self._buffer) > 0:
+                self._connection.send(self._buffer.pop(0))
+            self._connection.send(data)
+        else:
+            self._buffer.append(data)

@@ -1,4 +1,3 @@
-import asyncio
 import traceback
 
 from aiortc import RTCSessionDescription, RTCPeerConnection, RTCDataChannel
@@ -57,8 +56,7 @@ class TunnelServer:
     def _configure_channel(self, channel: RTCDataChannel, client: SocketClient, client_id: str):
         @channel.on('message')
         def on_message(message):
-            # TODO maybe it's possible to make it not async?
-            asyncio.ensure_future(client.send_async(message))
+            client.send(message)
 
         @channel.on('close')
         def on_close():
@@ -66,6 +64,7 @@ class TunnelServer:
             client.close()
 
         async def receive_loop_async():
+            await client.wait_until_connected_async()
             while True:
                 try:
                     data = await client.receive_async()

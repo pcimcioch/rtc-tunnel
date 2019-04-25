@@ -1,12 +1,17 @@
+import argparse
 import asyncio
-# TODO add readme
 # TODO test with rsync
 # TODO add signalling server
 # TODO test on raspberry startup
 from tunnel import TunnelClient
 
 if __name__ == '__main__':
-    client = TunnelClient('', 3334, 22)
+    parser = argparse.ArgumentParser(description='RTC Tunneling client')
+    parser.add_argument('--destination-port', '-d', help='Destination port', default=22)
+    parser.add_argument('--source-port', '-s', help='Source port', default=3334)
+    args = parser.parse_args()
+
+    client = TunnelClient('', args.source_port, args.destination_port)
 
     loop = asyncio.get_event_loop()
     try:

@@ -4,8 +4,9 @@ import string
 import traceback
 
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCDataChannel
-from aiortc.contrib.signaling import CopyAndPasteSignaling
 from asyncio import StreamWriter, StreamReader
+
+from tunnel.signaling import ConsoleSignaling
 from .socket_connection import SocketConnection
 
 
@@ -14,31 +15,38 @@ class TunnelClient:
         self._host = host
         self._port = port
         self._destination_port = destination_port
+        self._running = asyncio.Event()
         self._signal_server = None
         self._server = None
         self._peer_connection = None
 
     async def run_async(self):
-        print('[INIT] Creating PeerConnection')
+        self._running.clear()
+
+        print('[INIT] Creating RTC Connection')
         self._peer_connection = RTCPeerConnection()
         self._peer_connection.createDataChannel('init')
         await self._peer_connection.setLocalDescription(await self._peer_connection.createOffer())
         # TODO what to do on _peer_connection error or close
 
         print('[INIT] Connecting with signaling server')
-        self._signal_server = CopyAndPasteSignaling()
+        self._signal_server = ConsoleSignaling()
         await self._signal_server.connect()
 
         print('[INIT] Sending local descriptor to signaling server')
-        await self._signal_server.send(self._peer_connection.localDescription)
+        await self._signal_server.send_async(self._peer_connection.localDescription)
 
         print('[INIT] Awaiting answer from signaling server')
-        obj = await self._signal_server.receive()
+        obj = await self._signal_server.receive_async()
         if not isinstance(obj, RTCSessionDescription) or obj.type != 'answer':
             print('[ERROR] Unexpected answer from signaling server')
             return
         await self._peer_connection.setRemoteDescription(obj)
         print('[INIT] Established RTC connection')
+
+        self._signal_server.close()
+        self._signal_server = None
+        print('[INIT Closed signaling server')
 
         print('[INIT] Starting socket server on [%s:%s]' % (self._host, self._port))
         self._server = await asyncio.start_server(self._handle_new_client,host=self._host,port=self._port)
@@ -46,8 +54,8 @@ class TunnelClient:
         print('[STARTED] Tunneling client started')
         print()
 
-        await self._signal_server.receive()
-        print('[EXIT] Signalling server closed connection')
+        await self._running.wait()
+        print('[EXIT] Tunneling client main loop closing')
 
     def _handle_new_client(self, reader: StreamReader, writer: StreamWriter):
         client_id = ''.join(random.choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(8))
@@ -85,15 +93,21 @@ class TunnelClient:
             connection.close()
             channel.close()
 
+        # TODO do not use ensure future. Each created task should be accounted to and closed approprietly
         asyncio.ensure_future(receive_loop_async())
         print('[CLIENT %s] Datachannel %s configured' % (client_id, channel.label))
 
     async def close_async(self):
+        self._running.set()
+        print('[EXIT] Closing signalling server')
         if self._signal_server is not None:
-            await self._signal_server.close()
+            self._signal_server.close()
+        print('[EXIT] Closing socket server')
         if self._server is not None:
             self._server.close()
             await self._server.wait_closed()
             self._server = None
+        print('[EXIT] Closing RTC connection')
         if self._peer_connection is not None:
             await self._peer_connection.close()
+        print('[EXIT] Closed tunneling client')

@@ -6,7 +6,8 @@ import traceback
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCDataChannel
 from asyncio import StreamWriter, StreamReader
 
-from tunnel.signaling import ConsoleSignaling
+from .signaling import ConsoleSignaling
+from .tasks import Tasks
 from .socket_connection import SocketConnection
 
 
@@ -16,6 +17,7 @@ class TunnelClient:
         self._port = port
         self._destination_port = destination_port
         self._running = asyncio.Event()
+        self._tasks = Tasks()
         self._signal_server = None
         self._server = None
         self._peer_connection = None
@@ -93,8 +95,7 @@ class TunnelClient:
             connection.close()
             channel.close()
 
-        # TODO do not use ensure future. Each created task should be accounted to and closed approprietly
-        asyncio.ensure_future(receive_loop_async())
+        self._tasks.start_task(receive_loop_async())
         print('[CLIENT %s] Datachannel %s configured' % (client_id, channel.label))
 
     async def close_async(self):
@@ -110,4 +111,6 @@ class TunnelClient:
         print('[EXIT] Closing RTC connection')
         if self._peer_connection is not None:
             await self._peer_connection.close()
+        print('[EXIT] Waiting for all tasks to finish')
+        await self._tasks.close_async()
         print('[EXIT] Closed tunneling client')

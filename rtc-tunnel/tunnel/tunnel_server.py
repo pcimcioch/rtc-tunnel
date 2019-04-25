@@ -3,11 +3,13 @@ import traceback
 
 from aiortc import RTCSessionDescription, RTCPeerConnection, RTCDataChannel
 
+from .tasks import Tasks
 from .signaling import ConsoleSignaling
 from .socket_client import SocketClient
 
 class TunnelServer:
     def __init__(self):
+        self._tasks = Tasks()
         self._signal_server = None
 
     async def run_async(self):
@@ -47,7 +49,7 @@ class TunnelServer:
                 print('[CLIENT %s] Connected to %s channel' % (client_id, channel.label))
                 print('[CLIENT %s] Connecting to 127.0.0.1:%s' % (client_id, port))
                 client = SocketClient('127.0.0.1', port)
-                asyncio.ensure_future(client.connect_async())
+                self._tasks.start_task(client.connect_async())
                 self._configure_channel(channel, client, client_id)
             else:
                 print('[CLIENT] Ignoring unknown datachannel %s' % channel.label)
@@ -55,6 +57,7 @@ class TunnelServer:
     def _configure_channel(self, channel: RTCDataChannel, client: SocketClient, client_id: str):
         @channel.on('message')
         def on_message(message):
+            # TODO maybe it's possible to make it not async?
             asyncio.ensure_future(client.send_async(message))
 
         @channel.on('close')
@@ -76,7 +79,7 @@ class TunnelServer:
             client.close()
             channel.close()
 
-        asyncio.ensure_future(receive_loop_async())
+        self._tasks.start_task(receive_loop_async())
         print('[CLIENT %s] Datachannel %s configured' % (client_id, channel.label))
 
     async def close_async(self):
@@ -84,4 +87,6 @@ class TunnelServer:
         if self._signal_server is not None:
             self._signal_server.close()
         # TODO remove all created peer connections?
+        print('[EXIT] Waiting for all tasks to finish')
+        await self._tasks.close_async()
         print('[EXIT] Closed tunneling server')

@@ -6,6 +6,7 @@ import traceback
 from aiortc import RTCPeerConnection, RTCSessionDescription, RTCDataChannel
 from asyncio import StreamWriter, StreamReader
 
+from .util import now
 from .signaling import ConsoleSignaling
 from .tasks import Tasks
 from .socket_connection import SocketConnection
@@ -27,9 +28,8 @@ class TunnelClient:
 
         print('[INIT] Creating RTC Connection')
         self._peer_connection = RTCPeerConnection()
-        self._peer_connection.createDataChannel('init')
+        self._create_healthcheck_channel()
         await self._peer_connection.setLocalDescription(await self._peer_connection.createOffer())
-        # TODO what to do on _peer_connection error or close
 
         print('[INIT] Connecting with signaling server')
         self._signal_server = ConsoleSignaling()
@@ -47,7 +47,6 @@ class TunnelClient:
         print('[INIT] Established RTC connection')
 
         self._signal_server.close()
-        self._signal_server = None
         print('[INIT Closed signaling server')
 
         print('[INIT] Starting socket server on [%s:%s]' % (self._host, self._port))
@@ -58,6 +57,33 @@ class TunnelClient:
 
         await self._running.wait()
         print('[EXIT] Tunneling client main loop closing')
+
+    def _create_healthcheck_channel(self):
+        channel = self._peer_connection.createDataChannel('healthcheck')
+
+        @channel.on('open')
+        def on_open():
+            outer = {'last_healthcheck': now()}
+
+            @channel.on('close')
+            def on_close():
+                print('[HEALTH CHECK] Datachannel closed')
+                self._running.set()
+
+            @channel.on('message')
+            def on_message(message):
+                outer['last_healthcheck'] = now()
+
+            async def healthcheck_loop_async():
+                while now() - outer['last_healthcheck'] < 7000:
+                    try:
+                        channel.send('ping')
+                        await asyncio.sleep(3)
+                    except Exception:
+                        break
+                print('[HEALTH CHECK] Datachannel timeout')
+                self._running.set()
+            self._tasks.start_cancellable_task(healthcheck_loop_async())
 
     def _handle_new_client(self, reader: StreamReader, writer: StreamWriter):
         client_id = ''.join(random.choice(string.ascii_uppercase + string.ascii_lowercase + string.digits) for _ in range(8))
@@ -107,7 +133,6 @@ class TunnelClient:
         if self._server is not None:
             self._server.close()
             await self._server.wait_closed()
-            self._server = None
         print('[EXIT] Closing RTC connection')
         if self._peer_connection is not None:
             await self._peer_connection.close()

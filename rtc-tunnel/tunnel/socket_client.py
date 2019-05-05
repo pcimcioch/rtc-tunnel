@@ -23,7 +23,6 @@ class SocketClient:
     def close(self):
         if self._connection is not None:
             self._connection.close()
-            self._connection = None
 
     async def wait_until_connected_async(self):
         await self._connected.wait()

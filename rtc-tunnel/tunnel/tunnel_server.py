@@ -1,7 +1,9 @@
+import asyncio
 import traceback
 
 from aiortc import RTCSessionDescription, RTCPeerConnection, RTCDataChannel
 
+from .util import now
 from .tasks import Tasks
 from .signaling import ConsoleSignaling
 from .socket_client import SocketClient
@@ -30,14 +32,14 @@ class TunnelServer:
         peer_connection = RTCPeerConnection()
         await peer_connection.setRemoteDescription(obj)
         await peer_connection.setLocalDescription(await peer_connection.createAnswer())
-        # TODO what to do on peer_connection error or close
 
         print('[CLIENT] Sending local descriptor to signaling server')
         await self._signal_server.send_async(peer_connection.localDescription)
 
         @peer_connection.on('datachannel')
         def on_datachannel(channel: RTCDataChannel):
-            if channel.label == 'init':
+            if channel.label == 'healthcheck':
+                self._configure_healthcheck(channel, peer_connection)
                 print('[CLIENT] Established RTC connection')
                 return
 
@@ -52,6 +54,24 @@ class TunnelServer:
                 self._configure_channel(channel, client, client_id)
             else:
                 print('[CLIENT] Ignoring unknown datachannel %s' % channel.label)
+
+    def _configure_healthcheck(self, channel: RTCDataChannel, peer_connection: RTCPeerConnection):
+        outer = {'last_healthcheck': now()}
+
+        @channel.on('message')
+        def on_message(message):
+            outer['last_healthcheck'] = now()
+
+        async def healthcheck_loop_async():
+            while now() - outer['last_healthcheck'] < 7000:
+                try:
+                    channel.send('ping')
+                    await asyncio.sleep(3)
+                except Exception:
+                    break
+            print('[HEALTH CHECK] Datachannel timeout')
+            await peer_connection.close()
+        self._tasks.start_cancellable_task(healthcheck_loop_async())
 
     def _configure_channel(self, channel: RTCDataChannel, client: SocketClient, client_id: str):
         @channel.on('message')
@@ -85,7 +105,6 @@ class TunnelServer:
         print('[EXIT] Closing signalling server')
         if self._signal_server is not None:
             self._signal_server.close()
-        # TODO remove all created peer connections?
         print('[EXIT] Waiting for all tasks to finish')
         await self._tasks.close_async()
         print('[EXIT] Closed tunneling server')

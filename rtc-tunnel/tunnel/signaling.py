@@ -24,17 +24,17 @@ class ConsoleSignaling:
     def close(self):
         if self._reader is not None:
             self._read_transport.close()
-            self._reader = None
 
     async def receive_async(self):
         print('-- Please enter a message from remote party --')
         while True:
             data = await self._reader.readline()
-            print()
             try:
-                return object_from_string(data.decode(self._read_pipe.encoding))
+                obj = object_from_string(data.decode(self._read_pipe.encoding))
+                print()
+                return obj
             except JSONDecodeError:
-                print('Unable to parse signaling input as Json, ignoring')
+                pass
 
 
     async def send_async(self, descr):

@@ -7,7 +7,6 @@ from aiortc import RTCPeerConnection, RTCSessionDescription, RTCDataChannel
 from asyncio import StreamWriter, StreamReader
 
 from .util import now
-from .signaling import ConsoleSignaling
 from .tasks import Tasks
 from .socket_connection import SocketConnection
 
@@ -33,10 +32,10 @@ class TunnelClient:
         await self._peer_connection.setLocalDescription(await self._peer_connection.createOffer())
 
         print('[INIT] Connecting with signaling server')
-        await self._signal_server.connect()
+        await self._signal_server.connect_async()
 
         print('[INIT] Sending local descriptor to signaling server')
-        await self._signal_server.send_async(self._peer_connection.localDescription, self._destination)
+        self._signal_server.send(self._peer_connection.localDescription, self._destination)
 
         print('[INIT] Awaiting answer from signaling server')
         obj, src = await self._signal_server.receive_async()

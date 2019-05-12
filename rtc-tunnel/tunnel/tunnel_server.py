@@ -18,11 +18,15 @@ class TunnelServer:
 
         print('[INIT] Awaiting offers from signaling server')
         while True:
-            obj, src = await self._signal_server.receive_async()
+            try:
+                obj, src = await self._signal_server.receive_async()
+            except Exception:
+                break
             if isinstance(obj, RTCSessionDescription) and obj.type == 'offer':
                 await self._handle_new_client_async(obj, src)
             else:
                 print('[WARNING] Unknown request from signaling server, ignoring')
+        print('[EXIT] Connection with signaling server broken')
 
     async def _handle_new_client_async(self, obj: RTCSessionDescription, src: str):
         print('[CLIENT] Creating RTC Connection')

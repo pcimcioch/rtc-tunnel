@@ -74,7 +74,7 @@ class TunnelClient:
                 outer['last_healthcheck'] = now()
 
             async def healthcheck_loop_async():
-                while now() - outer['last_healthcheck'] < 7000:
+                while now() - outer['last_healthcheck'] < 20000:
                     try:
                         channel.send('ping')
                         await asyncio.sleep(3)

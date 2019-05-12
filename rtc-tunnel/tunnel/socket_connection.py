@@ -30,4 +30,4 @@ class SocketConnection:
             traceback.print_exc()
 
     async def receive_async(self):
-        return await self._reader.read(1024)
+        return await self._reader.read(4096)

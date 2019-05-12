@@ -22,8 +22,7 @@ class TunnelServer:
             if isinstance(obj, RTCSessionDescription) and obj.type == 'offer':
                 await self._handle_new_client_async(obj, src)
             else:
-                print('[EXIT] Signalling server closed connection')
-                break
+                print('[WARNING] Unknown request from signaling server, ignoring')
 
     async def _handle_new_client_async(self, obj: RTCSessionDescription, src: str):
         print('[CLIENT] Creating RTC Connection')
@@ -102,7 +101,7 @@ class TunnelServer:
     async def close_async(self):
         print('[EXIT] Closing signalling server')
         if self._signal_server is not None:
-            self._signal_server.close()
+            await self._signal_server.close_async()
         print('[EXIT] Waiting for all tasks to finish')
         await self._tasks.close_async()
         print('[EXIT] Closed tunneling server')

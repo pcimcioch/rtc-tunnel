@@ -45,8 +45,8 @@ class TunnelClient:
         await self._peer_connection.setRemoteDescription(obj)
         print('[INIT] Established RTC connection')
 
-        self._signal_server.close()
-        print('[INIT Closed signaling server')
+        await self._signal_server.close_async()
+        print('[INIT] Closed signaling server')
 
         print('[INIT] Starting socket server on [%s:%s]' % (self._host, self._port))
         self._server = await asyncio.start_server(self._handle_new_client,host=self._host,port=self._port)
@@ -127,7 +127,7 @@ class TunnelClient:
         self._running.set()
         print('[EXIT] Closing signalling server')
         if self._signal_server is not None:
-            self._signal_server.close()
+            await self._signal_server.close_async()
         print('[EXIT] Closing socket server')
         if self._server is not None:
             self._server.close()

@@ -1,6 +1,8 @@
 import asyncio
 import json
 import sys
+import requests
+import websockets
 from json import JSONDecodeError
 
 from aiortc import RTCSessionDescription, RTCIceCandidate
@@ -22,7 +24,7 @@ class ConsoleSignaling:
             lambda: asyncio.StreamReaderProtocol(self._reader),
             self._read_pipe)
 
-    def close(self):
+    async def close_async(self):
         if self._reader is not None:
             self._read_transport.close()
 
@@ -38,12 +40,36 @@ class ConsoleSignaling:
             except JSONDecodeError:
                 pass
 
-
     def send(self, descr, dest: str):
         print('-- Please send this message to the remote party named [%s] --' % dest)
         message = object_to_string(descr, self._source)
         self._write_pipe.write(message + '\n')
         print()
+
+
+class WebSignaling:
+    def __init__(self, source: str, send_url: str, receive_url: str):
+        self._source = source
+        self._send_url = send_url
+        self._receive_url = receive_url
+        self._client = None
+
+    async def connect_async(self):
+        self._client = await websockets.connect(self._receive_url + '/topic/message/' + self._source)
+
+    async def close_async(self):
+        if self._client is not None:
+            await self._client.close()
+
+    async def receive_async(self):
+        message = await self._client.recv()
+        return object_from_string(message)
+
+    def send(self, descr, dest: str):
+        message = object_to_string(descr, self._source)
+        response = requests.post(self._send_url + '/message/' + dest, data=message)
+        if response.status_code != 200:
+            raise IOError('Unable to send signaling message')
 
 
 def object_to_string(obj, source: str):

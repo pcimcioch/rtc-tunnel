@@ -1,9 +1,16 @@
+import argparse
 import asyncio
 
 from tunnel import TunnelServer
+from tunnel.signaling import ConsoleSignaling
 
 if __name__ == '__main__':
-    server = TunnelServer()
+    parser = argparse.ArgumentParser(description='RTC Tunneling server')
+    parser.add_argument('--source-name', '-S', help='Source name', default='server')
+    args = parser.parse_args()
+
+    signal_server = ConsoleSignaling(args.source_name)
+    server = TunnelServer(signal_server)
 
     loop = asyncio.get_event_loop()
     try:

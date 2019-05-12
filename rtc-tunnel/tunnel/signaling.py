@@ -8,7 +8,8 @@ from aiortc.sdp import candidate_from_sdp, candidate_to_sdp
 
 
 class ConsoleSignaling:
-    def __init__(self):
+    def __init__(self, source:str):
+        self.source = source
         self._read_pipe = sys.stdin
         self._read_transport = None
         self._reader = None
@@ -26,31 +27,31 @@ class ConsoleSignaling:
             self._read_transport.close()
 
     async def receive_async(self):
-        print('-- Please enter a message from remote party --')
+        print('-- Please enter a message from remote party to [%s] --' % self.source)
         while True:
             data = await self._reader.readline()
             try:
-                obj = object_from_string(data.decode(self._read_pipe.encoding))
+                obj, source = object_from_string(data.decode(self._read_pipe.encoding))
                 print()
-                return obj
+                return (obj, source)
             except JSONDecodeError:
                 pass
 
 
-    async def send_async(self, descr):
-        print('-- Please send this message to the remote party --')
-        self._write_pipe.write(object_to_string(descr) + '\n')
+    async def send_async(self, descr, dest: str):
+        print('-- Please send this message to the remote party named [%s] --' % dest)
+        self._write_pipe.write(object_to_string(descr, self.source) + '\n')
         print()
 
 
-def object_to_string(obj):
+def object_to_string(obj, source: str):
     if isinstance(obj, RTCSessionDescription):
-        message = {
+        data = {
             'sdp': obj.sdp,
             'type': obj.type
         }
     elif isinstance(obj, RTCIceCandidate):
-        message = {
+        data = {
             'candidate': 'candidate:' + candidate_to_sdp(obj),
             'id': obj.sdpMid,
             'label': obj.sdpMLineIndex,
@@ -58,15 +59,22 @@ def object_to_string(obj):
         }
     else:
         raise ValueError('Can only send RTCSessionDescription or RTCIceCandidate')
+    message = {
+        'source': source,
+        'data': data
+    }
     return json.dumps(message, sort_keys=True)
 
 
 def object_from_string(message_str):
-    message = json.loads(message_str)
-    if message['type'] in ['answer', 'offer']:
-        return RTCSessionDescription(**message)
-    elif message['type'] == 'candidate':
-        candidate = candidate_from_sdp(message['candidate'].split(':', 1)[1])
-        candidate.sdpMid = message['id']
-        candidate.sdpMLineIndex = message['label']
-        return candidate
+    obj = json.loads(message_str)
+    data = obj['data']
+    source = obj['source']
+
+    if data['type'] in ['answer', 'offer']:
+        return (RTCSessionDescription(**data), source)
+    elif data['type'] == 'candidate':
+        candidate = candidate_from_sdp(data['candidate'].split(':', 1)[1])
+        candidate.sdpMid = data['id']
+        candidate.sdpMLineIndex = data['label']
+        return (candidate, source)

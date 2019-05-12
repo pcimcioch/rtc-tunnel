@@ -13,13 +13,14 @@ from .socket_connection import SocketConnection
 
 
 class TunnelClient:
-    def __init__(self, host: str, port: int, destination_port: int):
+    def __init__(self, host: str, port: int, destination_port: int, signal_server, destination: str):
         self._host = host
         self._port = port
         self._destination_port = destination_port
+        self._signal_server = signal_server
+        self._destination = destination
         self._running = asyncio.Event()
         self._tasks = Tasks()
-        self._signal_server = None
         self._server = None
         self._peer_connection = None
 
@@ -32,14 +33,13 @@ class TunnelClient:
         await self._peer_connection.setLocalDescription(await self._peer_connection.createOffer())
 
         print('[INIT] Connecting with signaling server')
-        self._signal_server = ConsoleSignaling()
         await self._signal_server.connect()
 
         print('[INIT] Sending local descriptor to signaling server')
-        await self._signal_server.send_async(self._peer_connection.localDescription)
+        await self._signal_server.send_async(self._peer_connection.localDescription, self._destination)
 
         print('[INIT] Awaiting answer from signaling server')
-        obj = await self._signal_server.receive_async()
+        obj, src = await self._signal_server.receive_async()
         if not isinstance(obj, RTCSessionDescription) or obj.type != 'answer':
             print('[ERROR] Unexpected answer from signaling server')
             return

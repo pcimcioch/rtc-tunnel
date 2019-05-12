@@ -9,32 +9,31 @@ from .signaling import ConsoleSignaling
 from .socket_client import SocketClient
 
 class TunnelServer:
-    def __init__(self):
+    def __init__(self, signal_server):
         self._tasks = Tasks()
-        self._signal_server = None
+        self._signal_server = signal_server
 
     async def run_async(self):
         print('[INIT] Connecting with signaling server')
-        self._signal_server = ConsoleSignaling()
         await self._signal_server.connect()
 
         print('[INIT] Awaiting offers from signaling server')
         while True:
-            obj = await self._signal_server.receive_async()
+            obj, src = await self._signal_server.receive_async()
             if isinstance(obj, RTCSessionDescription) and obj.type == 'offer':
-                await self._handle_new_client_async(obj)
+                await self._handle_new_client_async(obj, src)
             else:
                 print('[EXIT] Signalling server closed connection')
                 break
 
-    async def _handle_new_client_async(self, obj: RTCSessionDescription):
+    async def _handle_new_client_async(self, obj: RTCSessionDescription, src: str):
         print('[CLIENT] Creating RTC Connection')
         peer_connection = RTCPeerConnection()
         await peer_connection.setRemoteDescription(obj)
         await peer_connection.setLocalDescription(await peer_connection.createAnswer())
 
         print('[CLIENT] Sending local descriptor to signaling server')
-        await self._signal_server.send_async(peer_connection.localDescription)
+        await self._signal_server.send_async(peer_connection.localDescription, src)
 
         @peer_connection.on('datachannel')
         def on_datachannel(channel: RTCDataChannel):

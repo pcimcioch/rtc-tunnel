@@ -69,7 +69,7 @@ class WebSignaling:
         message = object_to_string(descr, self._source)
         response = requests.post(self._send_url + '/message/' + dest, data=message)
         if response.status_code != 200:
-            raise IOError('Unable to send signaling message')
+            raise IOError('Unable to send signaling message: ' + str(response.status_code))
 
 
 def object_to_string(obj, source: str):

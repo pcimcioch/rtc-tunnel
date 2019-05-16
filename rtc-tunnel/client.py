@@ -1,6 +1,7 @@
+#!/usr/bin/env python3
+
 import argparse
 import asyncio
-# TODO Test on raspberry startup as service
 import logging.handlers
 import sys
 

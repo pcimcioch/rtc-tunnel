@@ -86,6 +86,7 @@ There are few cloud providers that would allow you to host app for free like tha
 1. Select repository with [rtc-signal-server](https://github.com/pcimcioch/rtc-signal-server) as code source. I advise to fork this repo, as it may change in the future!
 1. Select `gradle` Buildpack
 1. Set ConfigVar `JAVA_OPTS`=`-Dspring.security.user.password=mypassword`
+
 Application will be automatically built and deployed.
 
 Let's say signal server is available at `https://my-signal-server.herokuapp.com` and it's configured to use password `mypassword`

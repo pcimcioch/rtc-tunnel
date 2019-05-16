@@ -1,8 +1,20 @@
 import argparse
 import asyncio
+import logging.handlers
+import sys
 
 from tunnel import TunnelServer
 from tunnel.signaling import WebSignaling, ConsoleSignaling
+
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s %(message)s',
+    handlers=[
+        logging.handlers.TimedRotatingFileHandler('/tmp/rtc-server.log', when="midnight", backupCount=3),
+        logging.StreamHandler(sys.stdout)
+    ])
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='RTC Tunneling server')

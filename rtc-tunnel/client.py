@@ -1,8 +1,21 @@
 import argparse
 import asyncio
 # TODO Test on raspberry startup as service
+import logging.handlers
+import sys
+
 from tunnel import TunnelClient
 from tunnel.signaling import WebSignaling, ConsoleSignaling
+
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s %(message)s',
+    handlers=[
+        logging.handlers.TimedRotatingFileHandler('/tmp/rtc-client.log', when="midnight", backupCount=3),
+        logging.StreamHandler(sys.stdout)
+    ])
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='RTC Tunneling client')

@@ -17,7 +17,11 @@ class TunnelServer:
     async def run_async(self):
         while not self._running.is_set():
             logging.info('[INIT] Connecting with signaling server')
-            await self._signal_server.connect_async()
+            try:
+                await self._signal_server.connect_async()
+            except Exception:
+                await asyncio.sleep(300)
+                continue
 
             logging.info('[INIT] Awaiting offers from signaling server')
             while True:
